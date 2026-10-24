@@ -1,0 +1,18 @@
+#!/bin/sh
+# git の pre-push フック: main / develop への直接の push を拒否する。
+# Claude だけでなく、自分のターミナルからの push にも効く。
+# 有効にするには: git config core.hooksPath .githooks
+#
+# 最初の push など、どうしても必要なときだけ、自分のターミナルで:
+#   git push --no-verify -u origin main develop
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/develop)
+      echo "pre-push: ${remote_ref#refs/heads/} への直接の push は禁止です。" >&2
+      echo "          develop から作業ブランチを切り、develop への PR で取り込んでください。" >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

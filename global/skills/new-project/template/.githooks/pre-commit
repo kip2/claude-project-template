@@ -1,0 +1,16 @@
+#!/bin/sh
+# git の pre-commit フック: main / develop にいるときのコミットを拒否する。
+# コミットが 1 つもないリポジトリの最初のコミットだけは許可する（develop を作るため）。
+# 有効にするには: git config core.hooksPath .githooks
+
+branch=$(git symbolic-ref --short -q HEAD)
+case "$branch" in
+  main|develop)
+    if git rev-parse --verify -q HEAD >/dev/null; then
+      echo "pre-commit: $branch ブランチへの直接のコミットは禁止です。" >&2
+      echo "            git switch -c feature/<内容> で作業ブランチを切ってからコミットしてください。" >&2
+      exit 1
+    fi
+    ;;
+esac
+exit 0

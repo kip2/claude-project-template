@@ -1,0 +1,27 @@
+# 秘密情報
+.env
+.env.*
+!env.example
+
+# Claude Code の個人設定
+.claude/settings.local.json
+
+# サンドボックスの目印
+# Claude Code のサンドボックスは、書き換えを禁止したファイルを空の特殊ファイルで塞ぐ。
+# git がこれを拾って失敗しないように無視する。
+.bashrc
+.bash_profile
+.profile
+.zshrc
+.zprofile
+.gitconfig
+.ripgreprc
+.idea
+.vscode
+
+# 依存・ビルド成果物
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/

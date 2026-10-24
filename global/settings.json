@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "cleanupPeriodDays": 180,
+  "enableAllProjectMcpServers": false,
+  "env": {
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"
+  },
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(doas *)",
+      "Bash(mkfs *)",
+      "Bash(dd *)",
+      "Bash(fdisk *)",
+      "Bash(parted *)",
+      "Bash(wipefs *)",
+      "Bash(shutdown *)",
+      "Bash(reboot *)",
+      "Bash(poweroff *)",
+      "Bash(halt *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(npm publish *)",
+
+      "Bash(rm -r *)",
+      "Bash(rm -R *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm --recursive *)",
+      "Bash(rmdir *)",
+      "Bash(gio trash *)",
+      "Bash(gio remove *)",
+      "Bash(trash *)",
+      "Bash(trash-put *)",
+      "Bash(trash-empty *)",
+      "Bash(shred *)",
+      "Bash(git rm -r *)",
+      "Bash(git rm -rf *)",
+      "Bash(git rm -f *)",
+
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force *)",
+      "Bash(git push * -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git branch -D *)",
+      "Bash(git checkout .)",
+      "Bash(git checkout -- .)",
+      "Bash(git restore .)",
+      "Bash(gh pr merge *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Bash(gh api *branches*protection*)",
+      "Bash(gh api *rulesets*)",
+
+      "Read(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.azure/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.git-credentials)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.gem/credentials)",
+      "Read(~/.local/share/keyrings/**)",
+      "Read(~/.claude/.credentials.json)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+
+      "Edit(~/.ssh/**)",
+      "Edit(~/.bashrc)",
+      "Edit(~/.bash_profile)",
+      "Edit(~/.zshrc)",
+      "Edit(~/.profile)",
+      "Edit(~/.config/fish/**)",
+      "Edit(~/.gitconfig)",
+      "Edit(//etc/**)",
+      "Edit(//usr/**)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Edit(./.githooks/**)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(git rm *)",
+      "Bash(git push *)",
+      "Bash(git branch -d *)",
+      "Bash(git checkout -- *)",
+      "Bash(git restore *)",
+      "Bash(git rebase *)",
+      "Bash(git stash drop *)",
+      "Bash(git stash clear *)",
+      "Bash(git config *)",
+      "Bash(gh pr create *)",
+      "Bash(gh repo create *)",
+      "Bash(pacman *)",
+      "Bash(yay *)",
+      "Bash(paru *)",
+      "Bash(systemctl *)",
+      "Bash(docker *)",
+      "Edit(~/.claude/settings.json)",
+      "Edit(~/.claude/hooks/**)",
+      "Edit(~/.claude/skills/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/guard-bash.sh",
+            "timeout": 10,
+            "onFailure": "block",
+            "statusMessage": "安全チェック中..."
+          }
+        ]
+      }
+    ]
+  }
+}
