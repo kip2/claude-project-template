@@ -170,3 +170,23 @@ bash ~/.claude/skills/new-project/scripts/github-setup.sh [--private] [リポジ
 
 - 安全フックの中から gh を使えるか。フックはサンドボックスの外で動くはずだが、プロジェクト（サンドボックスあり）で実際に試す。
 - ~~`current_user_can_bypass` が、Claude 用のトークン（Administration なし）でも読めるか~~ → 2026-11-01 に確認済み。Claude 用のトークン（Contents・Pull requests・Metadata だけ）で、このリポジトリの保護の確認が「保護あり」になった。Administration は不要。
+- シークレットスキャンの push 保護が有効か。Claude 用のトークンでは `security_and_analysis` が読めないため、GitHub の画面で確かめる。
+
+### 6.11 すり抜けへの備え（コマンドの正規化）
+
+2026-11-01 の検証（[qa_log.md](qa_log.md) の Q-007）で、安全フックの正規表現をすり抜ける書き方が見つかった。書き方ごとにルールを足すのではなく、判定の前にコマンドを次のように「正規化」し、すべてのルールが同じ形を見るようにする。
+
+| 正規化 | 例 | 正規化しないと起きること |
+|---|---|---|
+| 引用符（`'` `"`）とバックスラッシュを取り除く | `"gh" pr merge`、`g''h pr merge`、`\gh pr merge` → `gh pr merge` | 引用符で区切るだけでルールに当たらない |
+| コマンドのパスを取り除く | `/usr/bin/gh`、`/usr/bin/git` → `gh`、`git` | フルパスで書くとルールに当たらない |
+| git の全体オプションを取り除く | `git -C dir push`、`git -c x=y push`、`git --no-pager push` → `git push` | push と判定されず、main / develop の確認と GitHub 側の保護の確認を飛ばす。権限ルールの確認も出ない |
+
+- 正規化はルールに当たる範囲を広げるだけで、狭めない（引用符の中の文字も、もともと正規表現の対象だった）。
+- `git -c` で設定を渡す書き方のうち、フックの場所（`core.hooksPath`）・認証情報（`credential`）・push 先（`insteadOf`、`url`）を変えるものは止める。正規化で `-c` が消える前の、元のコマンドで調べる。
+- gh のルールでは、コマンドの後ろの区切りに、空白だけでなく `)` `` ` `` `|` `;` なども認める（`$(gh auth token)` を止めるため）。
+- 次も止める対象に足す：
+  - トークンを表示する別の方法：`gh auth status --show-token`（`-t`）、`git credential`（`fill` など）
+  - 検査を逃れる道になるもの：`gh alias set` / `gh alias import`（`gh pr merge` などに別名を付けられる）、`gh extension install` / `upgrade` / `exec`（任意のプログラムを入れて動かせる）
+- 権限ルールにも、`git -C * push *` / `git -c * push *` の確認と、上の禁止を足す。
+- **限界**：スクリプトに書いて実行する、別の言語から呼ぶ、変数でコマンド名を組み立てる、などは正規表現では塞げない。最後の守りは GitHub 側（ruleset と権限を絞ったトークン）に置く（6.1）。ただし、ruleset の PR 必須は承認 0 件なので、ローカルの守りをすり抜けた場合、Claude 用のトークンで PR をマージできる。1 人で使うリポジトリでは承認を必須にできないため、残る危険として受け入れる。

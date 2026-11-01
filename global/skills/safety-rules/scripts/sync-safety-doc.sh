@@ -63,6 +63,8 @@ generate() {
   echo "- main / develop にいるときの push・commit・merge・cherry-pick・revert・am・rebase"
   echo "- gh api の書き込み（GET 以外。-f / -F / --input で値を渡すものも含む）"
   echo "- push / PR 作成の前に GitHub 側の保護を確認し、足りないとき・確認できないときは止める（Private で保護がないときは毎回確認を出す）"
+  echo "- 判定の前に、引用符・コマンドのパス・git の全体オプション（-C / -c など）を取り除く（/usr/bin/gh、\"gh\"、git -C . push などのすり抜けを防ぐ）"
+  echo "- git -c での認証情報・push 先の URL の指定"
   echo
   echo "### このプロジェクト（.claude/settings.json）"
   echo

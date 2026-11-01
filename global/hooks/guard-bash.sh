@@ -18,6 +18,15 @@ cmd="$(jq -r '.tool_input.command // ""' <<<"$input")"
 cwd="$(jq -r '.cwd // ""' <<<"$input")"
 [ -d "$cwd" ] || cwd="$PWD"
 
+# 判定の前にコマンドを正規化する（すり抜けへの備え。docs/design.md の 6.11）
+#   flat: 引用符・バックスラッシュとコマンドのパスを取り除く  "gh" / g''h / /usr/bin/gh → gh
+#   cmd : さらに git の全体オプションを取り除く  git -C dir / -c x=y / --no-pager push → git push
+flat="$(printf '%s' "$cmd" | tr -d "\"'\\\\" \
+  | sed -E 's#(^|[;&|(`[:space:]])[^[:space:];&|(`]*/(gh|git)([[:space:];&|)`]|$)#\1\2\3#g')"
+cmd="$(printf '%s' "$flat" | sed -E -e ':a' \
+  -e 's/(^|[;&|(`[:space:]])git[[:space:]]+(-[Cc][[:space:]]*[^[:space:];&|]+|--(git-dir|work-tree|namespace|config-env)([[:space:]]+|=)[^[:space:];&|]+|--[a-z-]+(=[^[:space:];&|]*)?|-[pP])([[:space:]]|$)/\1git\6/' \
+  -e 'ta')"
+
 FOLDER_MSG='フォルダや複数ファイルの削除はユーザーが行う。消す候補ごとに、ファイル数・サイズ・git で管理しているか・コミットしていない変更があるかを示し、削除コマンドをユーザーに渡すこと'
 
 deny() {
@@ -85,9 +94,9 @@ if has 'git[[:space:]]+restore[[:space:]]([^;&|]*[[:space:]])?\.(/)?([[:space:]]
   fi
 fi
 
-# git のフックの場所（core.hooksPath）は .githooks 以外にさせない
-if printf '%s' "$cmd" | grep -Eqi -- 'core\.hookspath'; then
-  if ! has '^git[[:space:]]+config[[:space:]]+(--local[[:space:]]+)?core\.hooksPath[[:space:]]+\.githooks[[:space:]]*$'; then
+# git のフックの場所（core.hooksPath）は .githooks 以外にさせない（git -c で渡すものも見るため、flat で調べる）
+if printf '%s' "$flat" | grep -Eqi -- 'core\.hookspath'; then
+  if ! printf '%s' "$flat" | grep -Eq -- '^git[[:space:]]+config[[:space:]]+(--local[[:space:]]+)?core\.hooksPath[[:space:]]+\.githooks[[:space:]]*$'; then
     deny 'core.hooksPath の変更は禁止（設定できるのは git config core.hooksPath .githooks だけ）'
   fi
 fi
@@ -97,13 +106,21 @@ check '(^|[;&|(`[:space:]])gh[[:space:]]+pr[[:space:]]+merge' 'PR のマージ�
 check '(^|[;&|(`[:space:]])gh[[:space:]]+repo[[:space:]]+(delete|edit)' 'リポジトリの削除・設定変更（公開範囲など）は禁止'
 check '(^|[;&|(`[:space:]])gh[[:space:]]+api[[:space:]][^;&|]*(rulesets|protection)' 'ブランチ保護の設定変更はユーザーが行う'
 check '(^|[;&|(`[:space:]])gh[[:space:]]+ruleset([[:space:]]|$)' 'ブランチ保護（ruleset）の操作はユーザーが行う'
-check '(^|[;&|(`[:space:]])gh[[:space:]]+auth[[:space:]]+(token|login|logout|refresh|switch|setup-git)([[:space:]]|$)' 'gh のログイン情報の表示・変更は禁止'
-check '(^|[;&|(`[:space:]])gh[[:space:]]+(secret|variable)([[:space:]]|$)' 'GitHub の Secrets / Variables の操作は禁止'
-check '(^|[;&|(`[:space:]])gh[[:space:]]+release[[:space:]]+(create|delete|delete-asset|edit|upload)([[:space:]]|$)' 'リリースの作成・変更・削除はユーザーが行う'
-check '(^|[;&|(`[:space:]])gh[[:space:]]+workflow[[:space:]]+(run|enable|disable)([[:space:]]|$)' 'ワークフローの実行・有効化・無効化はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+auth[[:space:]]+(token|login|logout|refresh|switch|setup-git)([^[:alnum:]_-]|$)' 'gh のログイン情報の表示・変更は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+auth[[:space:]]+status([[:space:]][^;&|]*)?[[:space:]](--show-token|-[a-zA-Z]*t[a-zA-Z]*)([^[:alnum:]_-]|$)' 'gh のトークンの表示（gh auth status --show-token）は禁止'
+check 'git[[:space:]]+credential([^[:alnum:]_]|$)' 'git の認証情報の読み出し（git credential）は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+alias[[:space:]]+(set|import)([^[:alnum:]_-]|$)' 'gh の別名の登録は禁止（別名で安全ルールを逃れられるため）'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+(extension|extensions|ext)[[:space:]]+(install|upgrade|exec|create)([^[:alnum:]_-]|$)' 'gh の拡張機能の導入・実行は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+(secret|variable)([^[:alnum:]_-]|$)' 'GitHub の Secrets / Variables の操作は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+release[[:space:]]+(create|delete|delete-asset|edit|upload)([^[:alnum:]_-]|$)' 'リリースの作成・変更・削除はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+workflow[[:space:]]+(run|enable|disable)([^[:alnum:]_-]|$)' 'ワークフローの実行・有効化・無効化はユーザーが行う'
 check '(^|[;&|(`[:space:]])gh[[:space:]]+repo[[:space:]]+set-default' 'gh の既定のリポジトリの変更は禁止'
 check 'git[[:space:]]+remote[[:space:]]+(add|set-url|rename)([[:space:]]|$)' 'push 先（リモート）の追加・変更はユーザーが行う'
 check 'git[[:space:]]+config[[:space:]][^;&|]*(credential|[Ii]nstead[Oo]f|remote\.[^[:space:]]+\.(push)?url)' 'git の認証情報・push 先の URL の設定は禁止'
+# git -c / --config-env で渡す設定は、正規化で消える前の flat で調べる
+if printf '%s' "$flat" | grep -Eqi -- 'git[[:space:]]+([^;&|]*[[:space:]])?(-c|--config-env)([[:space:]]+|=)?[^[:space:];&|]*(credential|insteadof|\.(push)?url=)'; then
+  deny 'git -c での認証情報・push 先の URL の指定は禁止'
+fi
 check '(^|[;&|(`[:space:]])(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)=' 'gh を別のログインやトークンで動かす指定は禁止'
 check '(^|[;&|(`[:space:]])((ba|z|da)?sh|source|exec|\.)[[:space:]]+([^;&|]*[[:space:]])?[^[:space:];&|]*github-setup\.sh' 'GitHub のセットアップスクリプトはユーザーが自分のターミナルで実行する'
 check '(^|[;&|(`])[[:space:]]*[^[:space:];&|]*github-setup\.sh' 'GitHub のセットアップスクリプトはユーザーが自分のターミナルで実行する'
@@ -176,7 +193,7 @@ if has 'git[[:space:]]+push([[:space:]]|$)'; then
   set -e
 fi
 
-if has '(^|[;&|(`[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+if has '(^|[;&|(`[:space:]])gh[[:space:]]+pr[[:space:]]+create([^[:alnum:]_-]|$)'; then
   pr_target="$(printf '%s' "$cmd" | grep -Eo -- '(-R|--repo)([[:space:]]+|=)[^[:space:];&|]+' | head -1 | sed -E 's/^(-R|--repo)([[:space:]]+|=)//' || true)"
   set +e
   protect_check pr "$pr_target"
