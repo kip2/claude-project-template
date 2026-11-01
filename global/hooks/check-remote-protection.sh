@@ -7,7 +7,8 @@
 #   pr  : 3 つ目を省くと、gh の既定（gh repo set-default）、upstream、origin の順に見る
 #
 # 終了コード: 0 = 保護あり / 1 = 保護が足りない / 2 = 確認できない
-# 1 と 2 のときは、理由を 1 行で標準出力に出す。
+#             3 = Private で GitHub 側の保護がない（無料プランでは ruleset が使えない）
+# 0 以外のときは、理由を 1 行で標準出力に出す。
 
 set -uo pipefail
 
@@ -20,6 +21,7 @@ TIMEOUT=8
 
 weak() { echo "$1"; exit 1; }
 unknown() { echo "$1"; exit 2; }
+noprotect() { echo "$1"; exit 3; }
 
 command -v gh >/dev/null 2>&1 || unknown "gh が見つからない"
 command -v jq >/dev/null 2>&1 || unknown "jq が見つからない"
@@ -63,18 +65,25 @@ API_FAIL="GitHub の API で $repo を読めない（オフライン、gh のロ
 # ---- 公開範囲 ----
 info="$(api "repos/$repo")" || unknown "$API_FAIL"
 private="$(jq -r '.private' <<<"$info" 2>/dev/null)"   # true / false / null（// は false も空扱いするので使わない）
-[ "$private" = false ] || {
-  [ "$private" = true ] && weak "$repo は Private。無料プランの Private リポジトリでは GitHub のブランチ保護が効かない"
-  unknown "$repo の公開範囲が分からない"
-}
+case "$private" in
+  true|false) ;;
+  *) unknown "$repo の公開範囲が分からない" ;;
+esac
+NOPROTECT_MSG="$repo は Private で、GitHub 側のブランチ保護がない（無料プランでは使えない）。守りはローカルだけ"
 
 # ---- main / develop にかかっているルール ----
 # このエンドポイントは「有効（active）」なルールだけを返す。試験モード（evaluate）のルールは含まれない。
 missing=()
 ids=()
+total=0
 for b in "${BRANCHES[@]}"; do
-  rules="$(api "repos/$repo/rules/branches/$b")" || unknown "$API_FAIL"
+  if ! rules="$(api "repos/$repo/rules/branches/$b")"; then
+    # 公開範囲は読めたので、ネットワークやログインの問題ではない。無料プランの Private は、ここで断られることがある
+    [ "$private" = true ] && noprotect "$NOPROTECT_MSG"
+    unknown "$API_FAIL"
+  fi
   jq -e 'type == "array"' <<<"$rules" >/dev/null 2>&1 || unknown "$repo の $b のルールが読めない"
+  total=$((total + $(jq 'length' <<<"$rules")))
   for r in "${REQUIRED[@]}"; do
     jq -e --arg t "$r" 'any(.[]; .type == $t)' <<<"$rules" >/dev/null || missing+=("$b:$r")
   done
@@ -82,6 +91,8 @@ for b in "${BRANCHES[@]}"; do
 done
 
 if [ ${#missing[@]} -gt 0 ]; then
+  # Private でルールが 1 つもない = 保護なし（確認を出す）。一部だけあるのは設定の不足（止める）
+  [ "$private" = true ] && [ "$total" -eq 0 ] && noprotect "$NOPROTECT_MSG"
   weak "$repo に有効なルールが足りない（${missing[*]}）"
 fi
 

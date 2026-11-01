@@ -24,7 +24,7 @@ description: Claude Code の安全ルール（権限ルール deny/ask、危険�
 | スクリプト | 用途 |
 |---|---|
 | `bash ~/.claude/skills/safety-rules/scripts/show-rules.sh [プロジェクトのディレクトリ]` | 両方の層のルールを一覧表示する |
-| `bash ~/.claude/skills/safety-rules/scripts/test-guard.sh [フックのパス]` | 安全フックのテスト（141 件以上。GitHub 側の保護の確認は偽の gh で試すので、ネットワークに出ない） |
+| `bash ~/.claude/skills/safety-rules/scripts/test-guard.sh [フックのパス]` | 安全フックのテスト（157 件以上。GitHub 側の保護の確認は偽の gh で試すので、ネットワークに出ない） |
 | `bash ~/.claude/hooks/check-remote-protection.sh <ディレクトリ> push` | push 先の GitHub 側の保護を確認する（安全フックも push / PR 作成の前に使う） |
 | `bash ~/.claude/skills/safety-rules/scripts/sync-safety-doc.sh [--check]` | プロジェクトの `docs/05_safety.md` のルール一覧を作り直す（`--check` を付けると点検だけ） |
 
