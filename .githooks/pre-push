@@ -1,10 +1,20 @@
 #!/bin/sh
-# git の pre-push フック: main / develop への直接の push を拒否する。
-# global/skills/new-project/template/.githooks/pre-push と同じ内容。
+# git の pre-push フック:
+#   1. main / develop への直接の push を拒否する。
+#   2. push するコミットに秘密情報（トークン・鍵など）が入っていないかを gitleaks で調べ、見つかれば拒否する。
+# Claude だけでなく、自分のターミナルからの push にも効く。
 # 有効にするには: git config core.hooksPath .githooks
 #
 # 最初の push など、どうしても必要なときだけ、自分のターミナルで:
 #   git push --no-verify -u origin main develop
+
+zero=0000000000000000000000000000000000000000
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks が見つからないため、秘密情報の検査ができません。push を止めました。" >&2
+  echo "          自分のターミナルで sudo pacman -S gitleaks を実行してから、もう一度 push してください。" >&2
+  exit 1
+fi
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
@@ -14,5 +24,20 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       exit 1
       ;;
   esac
+
+  # ブランチの削除は検査しない
+  [ "$local_sha" = "$zero" ] && continue
+
+  # 新しいブランチなら、リモートにまだないコミットだけ。既存のブランチなら、前回の push からの差分だけを調べる
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha --not --remotes"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  if ! gitleaks git --no-banner --redact --log-opts="$range" . >&2; then
+    echo "pre-push: 秘密情報らしきものが見つかったため、push を止めました（${local_ref#refs/heads/}）。" >&2
+    echo "          上の結果を確認し、コミットから取り除いてください。誤検知なら .gitleaksignore に追加します。" >&2
+    exit 1
+  fi
 done
 exit 0
