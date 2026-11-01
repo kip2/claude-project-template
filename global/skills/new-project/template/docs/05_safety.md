@@ -10,6 +10,8 @@ Claude Code が危険な操作をしないように、次の仕組みを重ね�
 | ④ サンドボックス | OS レベルの隔離（bubblewrap） | `.claude/settings.json` の `sandbox` | このプロジェクト |
 | ⑤ git のフック | main / develop への直接の push・commit を拒否 | `.githooks/` | このリポジトリ（Claude 以外の操作にも効く） |
 | ⑥ GitHub のブランチ保護 | main / develop は PR でしか変更できない | GitHub の Rulesets（`.github/rulesets/`） | GitHub 上（Public か有料プランのみ） |
+| ⑦ push 前の保護の確認 | push / PR 作成の前に⑥が有効かを確かめ、足りないとき・確認できないときは止める | `~/.claude/hooks/check-remote-protection.sh`（③から呼ぶ） | 全体 |
+| ⑧ 権限を絞ったトークン | gh / git が使うトークンは、選んだリポジトリの push と PR 作成だけができる | GitHub の Fine-grained token | GitHub 上 |
 
 ユーザー全体の層（②の一部と③）は、テンプレートリポジトリ `claude-project-template` から `~/.claude` に入れたもの。
 
@@ -29,7 +31,7 @@ Claude が実行する Bash コマンドは 1 つずつ bubblewrap の中で動�
 | 書き込み | プロジェクトディレクトリと一時ディレクトリのみ。`.claude/settings.json` はサンドボックス内から書き換え不可 |
 | 読み取り | `.env`、SSH・GPG・クラウド・gh などの認証情報は読めない |
 | ネットワーク | 許可リストのドメインのみ（1 章）。それ以外は確認が出る（安全モード起動では即拒否） |
-| サンドボックス外での実行 | 禁止。ただし `git push` / `fetch` / `pull` と、`gh` の PR 作成・閲覧・リポジトリ作成は、GitHub の認証情報を使うために外で動かす（確認は出る） |
+| サンドボックス外での実行 | 禁止。ただし `git push` / `fetch` / `pull` と、`gh` の PR の作成・閲覧・コメント・編集、CI の結果や Issue の閲覧は、GitHub の認証情報を使うために外で動かす（読み取り以外は確認が出る） |
 | サンドボックスが起動できない場合 | Claude Code を起動しない |
 
 ## 3. 削除のルール

@@ -3,6 +3,7 @@
 # 権限ルール（settings.json）はコマンドの先頭しか見ないため、
 # && や | でつないだ途中に紛れた危険な操作をここで正規表現で検出する。
 # あわせて、main / develop への直接の push・commit を止める（ブランチ運用の保護）。
+# push / PR 作成の前には、GitHub 側の保護が有効かを check-remote-protection.sh で確かめる。
 #
 # 入力: stdin に {"tool_input":{"command":"..."},"cwd":"..."} 形式の JSON
 # 出力: 止めるときは permissionDecision=deny の JSON を出力する
@@ -83,6 +84,26 @@ fi
 check '(^|[;&|(`[:space:]])gh[[:space:]]+pr[[:space:]]+merge' 'PR のマージはユーザーが行う（gh pr merge は禁止）'
 check '(^|[;&|(`[:space:]])gh[[:space:]]+repo[[:space:]]+(delete|edit)' 'リポジトリの削除・設定変更（公開範囲など）は禁止'
 check '(^|[;&|(`[:space:]])gh[[:space:]]+api[[:space:]][^;&|]*(rulesets|protection)' 'ブランチ保護の設定変更はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+ruleset([[:space:]]|$)' 'ブランチ保護（ruleset）の操作はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+auth[[:space:]]+(token|login|logout|refresh|switch|setup-git)([[:space:]]|$)' 'gh のログイン情報の表示・変更は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+(secret|variable)([[:space:]]|$)' 'GitHub の Secrets / Variables の操作は禁止'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+release[[:space:]]+(create|delete|delete-asset|edit|upload)([[:space:]]|$)' 'リリースの作成・変更・削除はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+workflow[[:space:]]+(run|enable|disable)([[:space:]]|$)' 'ワークフローの実行・有効化・無効化はユーザーが行う'
+check '(^|[;&|(`[:space:]])gh[[:space:]]+repo[[:space:]]+set-default' 'gh の既定のリポジトリの変更は禁止'
+check 'git[[:space:]]+remote[[:space:]]+(add|set-url|rename)([[:space:]]|$)' 'push 先（リモート）の追加・変更はユーザーが行う'
+check 'git[[:space:]]+config[[:space:]][^;&|]*(credential|[Ii]nstead[Oo]f|remote\.[^[:space:]]+\.(push)?url)' 'git の認証情報・push 先の URL の設定は禁止'
+
+# gh api の書き込み（GET / HEAD 以外）。-f / -F / --input で値を渡すと、gh は自動で POST にする
+api_seg="$(printf '%s' "$cmd" | grep -Eo '(^|[;&|(`[:space:]])gh[[:space:]]+api([[:space:]][^;&|]*)?' || true)"
+if [ -n "$api_seg" ]; then
+  methods="$(printf '%s' "$api_seg" | grep -Eo -- '(-X|--method)([[:space:]]+|=)?[A-Za-z]+' | sed -E 's/^(-X|--method)([[:space:]]+|=)?//' | tr '[:lower:]' '[:upper:]' || true)"
+  if printf '%s\n' "$methods" | grep -Evq '^(GET|HEAD|)$'; then
+    deny 'gh api の書き込み（GET 以外）は禁止'
+  fi
+  if [ -z "$methods" ] && printf '%s' "$api_seg" | grep -Eq -- '[[:space:]](-[fF]|--field|--raw-field|--input)([[:space:]=]|[^[:space:]]|$)'; then
+    deny 'gh api の書き込み（-f / -F / --input で値を渡すと POST になる）は禁止。読み取りなら -X GET を付ける'
+  fi
+fi
 
 # ---- 秘密情報 ----
 check '(cat|less|more|head|tail|bat|grep|cp|scp|curl|source|base64|xxd)[[:space:]].*\.env([[:space:]]|$|\.[a-z]+)' '.env の読み取り・送信は禁止'
@@ -109,6 +130,41 @@ if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
   if has 'git[[:space:]]+commit([[:space:]]|$)' && git -C "$cwd" rev-parse --verify -q HEAD >/dev/null 2>&1; then
     deny "いま $branch ブランチにいるため commit は禁止。$PROTECT_MSG"
   fi
+fi
+
+# ---- GitHub 側の保護の確認: push / PR 作成の前に、main / develop の保護が有効かを確かめる ----
+PROTECT_HOWTO='ユーザーに次を頼むこと：GitHub の Settings → Rules → Rulesets で、main と develop に「Restrict deletions」「Require a pull request before merging」「Block force pushes」をかけ、Enforcement を Active、Bypass list を空にする（.github/rulesets/protect-main-develop.json を「Import a ruleset」で読み込める）'
+checker="$(dirname "${BASH_SOURCE[0]}")/check-remote-protection.sh"
+
+protect_check() { # protect_check <push|pr> [リモート名 | URL | owner/repo]
+  local out rc
+  [ -f "$checker" ] || deny "GitHub 側の保護を確認できないため止めた（$checker がない）。ユーザーに状況を伝え、どうするか聞くこと"
+  out="$(bash "$checker" "$cwd" "$1" "${2:-}")"
+  rc=$?
+  case $rc in
+    0) ;;
+    1) deny "GitHub 側の保護が足りないため止めた：$out。$PROTECT_HOWTO" ;;
+    *) deny "GitHub 側の保護を確認できないため止めた：${out:-原因不明}。ユーザーに状況を伝え、どうするか聞くこと" ;;
+  esac
+}
+
+if has 'git[[:space:]]+push([[:space:]]|$)'; then
+  # git push [オプション] [リモート] … の、最初のオプションでない語をリモートとみなす
+  push_target=""
+  read -ra words <<<"$(printf '%s' "$cmd" | grep -Eo 'git[[:space:]]+push([[:space:]][^;&|]*)?' | head -1)"
+  for w in "${words[@]:2}"; do
+    case "$w" in -*) ;; *) push_target="$w"; break ;; esac
+  done
+  set +e
+  protect_check push "$push_target"
+  set -e
+fi
+
+if has '(^|[;&|(`[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+  pr_target="$(printf '%s' "$cmd" | grep -Eo -- '(-R|--repo)([[:space:]]+|=)[^[:space:];&|]+' | head -1 | sed -E 's/^(-R|--repo)([[:space:]]+|=)//' || true)"
+  set +e
+  protect_check pr "$pr_target"
+  set -e
 fi
 
 exit 0

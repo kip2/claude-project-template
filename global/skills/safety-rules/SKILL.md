@@ -9,7 +9,7 @@ description: Claude Code の安全ルール（権限ルール deny/ask、危険�
 
 | 層 | 効く範囲 | ファイル |
 |---|---|---|
-| **ユーザー全体** | このPCのこのユーザーの、すべての Claude Code | `~/.claude/settings.json`（権限ルール）、`~/.claude/hooks/guard-bash.sh`（安全フック） |
+| **ユーザー全体** | このPCのこのユーザーの、すべての Claude Code | `~/.claude/settings.json`（権限ルール）、`~/.claude/hooks/guard-bash.sh`（安全フック）、`~/.claude/hooks/check-remote-protection.sh`（GitHub 側の保護の確認） |
 | **プロジェクト** | そのプロジェクトだけ | `./.claude/settings.json`（サンドボックス・許可ドメイン・追加の権限ルール）、`./.claude/strict-settings.json`（安全モード起動用。許可ドメインを `settings.json` と揃える）、`./.githooks/`（git 自体のフック） |
 
 迷ったときの決め方：
@@ -24,7 +24,8 @@ description: Claude Code の安全ルール（権限ルール deny/ask、危険�
 | スクリプト | 用途 |
 |---|---|
 | `bash ~/.claude/skills/safety-rules/scripts/show-rules.sh [プロジェクトのディレクトリ]` | 両方の層のルールを一覧表示する |
-| `bash ~/.claude/skills/safety-rules/scripts/test-guard.sh [フックのパス]` | 安全フックのテスト（92 件以上） |
+| `bash ~/.claude/skills/safety-rules/scripts/test-guard.sh [フックのパス]` | 安全フックのテスト（141 件以上。GitHub 側の保護の確認は偽の gh で試すので、ネットワークに出ない） |
+| `bash ~/.claude/hooks/check-remote-protection.sh <ディレクトリ> push` | push 先の GitHub 側の保護を確認する（安全フックも push / PR 作成の前に使う） |
 | `bash ~/.claude/skills/safety-rules/scripts/sync-safety-doc.sh [--check]` | プロジェクトの `docs/05_safety.md` のルール一覧を作り直す（`--check` を付けると点検だけ） |
 
 ## 一覧を見たいと言われた場合
@@ -36,7 +37,8 @@ description: Claude Code の安全ルール（権限ルール deny/ask、危険�
 1. `test-guard.sh` を実行する。
 2. プロジェクトの中なら `sync-safety-doc.sh --check` を実行する（JSON が壊れていないか、許可ドメインが 2 つの設定ファイルで一致しているか、ドキュメントが最新か）。
 3. `show-rules.sh` の「git のフック」が「有効」になっているか確認する。
-4. 問題があればその内容と直し方を伝える。勝手には直さず、直してよいか確認する。
+4. `show-rules.sh` の「GitHub」欄で、push 先の保護が「有効」か、トークンの残り日数が 7 日以上あるかを確認する。サンドボックスの中で「確認できない」と出たら、ユーザーに自分のターミナルで `show-rules.sh` を実行してもらう。
+5. 問題があればその内容と直し方を伝える。勝手には直さず、直してよいか確認する。
 
 ## ルールを追加・削除する場合
 

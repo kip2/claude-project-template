@@ -25,6 +25,45 @@ done
 g "$work/develop" switch -c develop
 g "$work/feature" switch -c develop
 g "$work/feature" switch -c feature/x
+g "$work/feature" remote add origin https://github.com/test/repo.git
+mkdir -p "$work/gitlab"
+g "$work/gitlab" init -b main
+g "$work/gitlab" commit --allow-empty -m init
+g "$work/gitlab" switch -c feature/x
+g "$work/gitlab" remote add origin https://gitlab.com/test/repo.git
+
+# GitHub 側の保護の確認は、本物の gh の代わりに偽の gh を使う（ネットワークに出ない）。
+# FAKE_GH で GitHub 側の状態を切り替える：
+#   ok（保護あり）/ norules（ルールなし）/ nopr（PR 必須がない）/ bypass（自分が例外）
+#   nobypassinfo（例外かどうかが読めない）/ private（Private）/ offline（API に届かない）
+mkdir -p "$work/bin"
+cat >"$work/bin/gh" <<'FAKE'
+#!/usr/bin/env bash
+state="${FAKE_GH:-ok}"
+[ "$1" = api ] && [ "$state" != offline ] || exit 1
+full='[{"type":"deletion","ruleset_id":1},{"type":"non_fast_forward","ruleset_id":1},{"type":"pull_request","ruleset_id":1}]'
+case "$2" in
+  repos/*/rules/branches/*)
+    case "$state" in
+      norules) echo '[]' ;;
+      nopr) echo '[{"type":"deletion","ruleset_id":1},{"type":"non_fast_forward","ruleset_id":1}]' ;;
+      *) echo "$full" ;;
+    esac ;;
+  repos/*/rulesets/*)
+    case "$state" in
+      bypass) echo '{"id":1,"current_user_can_bypass":"always"}' ;;
+      nobypassinfo) echo '{"id":1}' ;;
+      *) echo '{"id":1,"current_user_can_bypass":"never"}' ;;
+    esac ;;
+  repos/*)
+    if [ "$state" = private ]; then echo '{"private":true}'; else echo '{"private":false}'; fi ;;
+  *) exit 1 ;;
+esac
+FAKE
+chmod +x "$work/bin/gh"
+export PATH="$work/bin:$PATH"
+export FAKE_GH=ok
+remote_state() { export FAKE_GH="$1"; }
 
 fail=0
 total=0
@@ -138,6 +177,64 @@ check DENY feature "gh repo delete foo --yes"
 check DENY feature "gh repo edit --visibility private"
 check DENY feature "gh api -X POST repos/o/r/rulesets --input x.json"
 check DENY feature "gh api -X DELETE repos/o/r/branches/main/protection"
+check DENY feature "gh ruleset list"
+check DENY feature "gh auth token"
+check DENY feature "gh auth login --with-token"
+check DENY feature "gh auth logout"
+check DENY feature "gh auth setup-git"
+check DENY feature "gh secret set API_KEY"
+check DENY feature "gh variable list"
+check DENY feature "gh release create v1.0.0"
+check DENY feature "gh release delete v1.0.0 --yes"
+check DENY feature "gh workflow run ci.yml"
+check DENY feature "gh repo set-default other/repo"
+check DENY feature "git remote add evil https://github.com/evil/repo.git"
+check DENY feature "git remote set-url origin https://github.com/evil/repo.git"
+check DENY feature "git config credential.helper store"
+check DENY feature "git config --global url.https://evil.example/.insteadOf https://github.com/"
+check DENY feature "git config remote.origin.pushurl https://github.com/evil/repo.git"
+check DENY feature "gh api -X PATCH repos/o/r -f default_branch=main"
+check DENY feature "gh api --method=DELETE repos/o/r/git/refs/heads/x"
+check DENY feature "gh api -XPOST repos/o/r/issues"
+check DENY feature "gh api repos/o/r/issues -f title=x"
+check DENY feature "gh api repos/o/r/git/refs --input ref.json"
+check DENY feature "echo ok && gh api graphql -F query=@q.graphql"
+check ALLOW feature "gh api repos/o/r/pulls"
+check ALLOW feature "gh api -X GET repos/o/r/issues -f state=open"
+check ALLOW feature "gh auth status"
+check ALLOW feature "gh release list"
+check ALLOW feature "gh release view v1.0.0"
+check ALLOW feature "gh workflow list"
+check ALLOW feature "gh pr checks 12"
+check ALLOW feature "gh run view 123"
+check ALLOW feature "git remote -v"
+check ALLOW feature "git config user.name"
+
+echo "--- GitHub 側の保護の確認（偽の gh を使う） ---"
+check ALLOW feature "git push -u origin feature/x"
+check ALLOW feature "gh pr create --base develop --fill"
+check ALLOW feature "gh pr create -R test/repo --base develop --fill"
+check ALLOW feature "git push https://github.com/test/repo.git feature/x"
+remote_state norules
+check DENY  feature "git push -u origin feature/x"
+check DENY  feature "gh pr create --base develop --fill"
+remote_state nopr
+check DENY  feature "git push"
+remote_state bypass
+check DENY  feature "git push -u origin feature/x"
+remote_state nobypassinfo
+check DENY  feature "git push -u origin feature/x"
+remote_state private
+check DENY  feature "git push -u origin feature/x"
+remote_state offline
+check DENY  feature "git push -u origin feature/x"
+check DENY  feature "gh pr create --base develop --fill"
+check ALLOW feature "git commit -m 'feat: x'"
+check ALLOW feature "gh pr view 12"
+remote_state ok
+check DENY  gitlab  "git push -u origin feature/x"
+check DENY  feature "git push upstream feature/x"
+check DENY  plain   "git push -u origin feature/x"
 
 echo "--- 秘密情報 ---"
 check DENY plain "cat .env"

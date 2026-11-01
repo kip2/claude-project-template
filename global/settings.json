@@ -56,6 +56,27 @@
       "Bash(gh repo edit *)",
       "Bash(gh api *branches*protection*)",
       "Bash(gh api *rulesets*)",
+      "Bash(gh ruleset *)",
+      "Bash(gh auth token *)",
+      "Bash(gh auth login *)",
+      "Bash(gh auth logout *)",
+      "Bash(gh auth refresh *)",
+      "Bash(gh auth setup-git *)",
+      "Bash(gh secret *)",
+      "Bash(gh variable *)",
+      "Bash(gh release create *)",
+      "Bash(gh release delete *)",
+      "Bash(gh release edit *)",
+      "Bash(gh release upload *)",
+      "Bash(gh workflow run *)",
+      "Bash(gh workflow enable *)",
+      "Bash(gh workflow disable *)",
+      "Bash(gh repo set-default *)",
+      "Bash(git remote add *)",
+      "Bash(git remote set-url *)",
+      "Bash(git remote rename *)",
+      "Bash(git config credential.*)",
+      "Bash(git config --global credential.*)",
 
       "Read(~/.ssh/**)",
       "Read(~/.gnupg/**)",
@@ -98,6 +119,9 @@
       "Bash(git stash clear *)",
       "Bash(git config *)",
       "Bash(gh pr create *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr ready *)",
       "Bash(gh repo create *)",
       "Bash(pacman *)",
       "Bash(yay *)",
@@ -107,6 +131,13 @@
       "Edit(~/.claude/settings.json)",
       "Edit(~/.claude/hooks/**)",
       "Edit(~/.claude/skills/**)"
+    ],
+    "allow": [
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh run view *)",
+      "Bash(gh issue view *)"
     ]
   },
   "hooks": {
@@ -117,7 +148,7 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/guard-bash.sh",
-            "timeout": 10,
+            "timeout": 30,
             "onFailure": "block",
             "statusMessage": "安全チェック中..."
           }

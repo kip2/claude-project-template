@@ -34,7 +34,12 @@
       "gh pr create *",
       "gh pr view *",
       "gh pr list *",
-      "gh repo create *"
+      "gh pr checks *",
+      "gh pr comment *",
+      "gh pr edit *",
+      "gh pr ready *",
+      "gh run view *",
+      "gh issue view *"
     ],
     "network": {
       "allowedDomains": [
