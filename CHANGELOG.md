@@ -36,3 +36,4 @@
 - 2026-11-01: 雛形の git の pre-push フックで、gitleaks による秘密情報の検査を行う（ユーザーが入れる）。
 - 2026-11-01: Private で GitHub 側の保護がないリポジトリでは、Claude の push / PR 作成を止めずに、毎回確認を出す（`check-remote-protection.sh` の終了コード 3）。ruleset がある Private（有料プラン）は Public と同じに扱う。
 - 2026-11-01: 安全フックと権限ルールで、gh を別のログインやトークンで動かす指定（`GH_CONFIG_DIR=`、`GH_TOKEN=` など）と、`github-setup.sh` の実行を止める。テストは 157 件。
+- 2026-11-01: 安全フックのすり抜けを修正（実地の検証で見つかったもの）。判定の前に、引用符・バックスラッシュ・コマンドのパス・git の全体オプション（`-C` / `-c` / `--no-pager` など）を取り除いてから調べる。これまで `git -C . push` は push と判定されず、main / develop の確認と GitHub 側の保護の確認を飛ばしていた。あわせて `$(gh auth token)` のような書き方、`gh auth status --show-token`、`git credential`、`gh alias set / import`、`gh extension install / upgrade / exec`、`git -c` での認証情報・push 先の指定を止める。権限ルールにも同じ禁止と、`git -C * push *` / `git -c * push *` の確認を追加。テストは 196 件。

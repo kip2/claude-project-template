@@ -76,3 +76,26 @@
   - Private で GitHub 側の保護がないときは、Claude の push と PR 作成のたびに確認を出す（止めはしない）。
   - スクリプトは Claude には実行させない（安全フック、権限ルール、スクリプト自身の確認）。
   - 詳細は [design.md](design.md) の 6.10。
+
+## Q-007: 安全装置が実際に働くかの検証（2026-11-01）
+
+- **相談**: gh などの安全装置がちゃんと働くかを検証してほしい。
+- **回答/検討**:
+  - 働いていたもの：
+    - `test-guard.sh` はリポジトリ版・`~/.claude` 版ともに 157 件すべて成功。`~/.claude` の中身（フック・skill・settings の権限とフック）はリポジトリと一致。
+    - このセッションで実際に止まった：`gh pr merge`、`gh auth token`、`gh api -X DELETE`、`git push origin develop`、`GH_TOKEN=`、`github-setup.sh` の実行。
+    - GitHub 側：main / develop の ruleset が有効で、自分は例外（bypass）ではない。既定のブランチは develop、自動マージはオフ。gh は Fine-grained のトークンで、git も `gh auth git-credential` 経由で同じトークンを使う。
+    - `core.hooksPath` は `.githooks`。pre-push は main / develop への push を拒否する。
+  - 見つかった穴（フックの正規表現をすり抜ける書き方）：
+    1. `git -C . push` / `git -c x=y push` / `git --no-pager push`：安全フックが push と判定せず、main / develop の確認と GitHub 側の保護の確認を飛ばす。権限ルールの確認（`git push *`）も出ない。残る守りは pre-push と GitHub の ruleset だけ（無料プランの Private は pre-push だけ）。`git -C . commit` も同様（pre-commit で止まる）。
+    2. `/usr/bin/gh pr merge`、`"gh" pr merge`：安全フックをすり抜ける（実地では権限の層で拒否された）。
+    3. `$(gh auth token)`、`` `gh auth token` ``、`gh auth token|cat`（空白なし）：安全フックをすり抜ける（実地では権限の層で拒否された）。`gh auth status --show-token`、`git credential fill` もトークンを表示できるが、止めていない。
+    4. `gh alias set`（マージなどを別名にできる）、`gh extension install`（任意のコードを入れる）を止めていない。
+    5. スクリプトに書いて実行すると、フックは中身を見られない（検証自体がこの形で行えた）。正規表現では塞げない。
+  - GitHub 側の残る危険：ruleset は「PR を経ること（承認 0 件）」なので、ローカルの守りをすり抜けた場合、Claude 用トークン（Contents・Pull requests の書き込み）で PR をマージできる。1 人で使うリポジトリでは承認を必須にできない。
+  - 確かめられなかったもの：シークレットスキャンの push 保護（Claude 用トークンでは `security_and_analysis` が読めない）。design.md 6.9 の「サンドボックスありのプロジェクトで、フックから gh を使えるか」。
+  - その他：トークンの期限が 2027-06-01 で、README の目安（30〜90 日）より長い。
+- **決定**:
+  - 穴の 1〜4 を塞ぐ。書き方ごとにルールを足すのではなく、判定の前にコマンドを正規化する（引用符・パス・git の全体オプションを取り除く）。権限ルールにも同じ禁止と確認を足す。
+  - 5 と、GitHub 側で PR のマージを止められないことは、残る危険として受け入れる。
+  - 詳細は [design.md](design.md) の 6.11。
