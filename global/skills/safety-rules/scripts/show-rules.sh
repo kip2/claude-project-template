@@ -38,6 +38,8 @@ if [ -f "$hook" ]; then
   echo "  - git restore .（作業中の変更をすべて捨てる。--staged だけなら許可）"
   echo "  - core.hooksPath の変更（.githooks 以外）"
   echo "  - main / develop にいるときの push・commit・merge・cherry-pick・revert・am・rebase"
+  echo "  - gh api の書き込み（GET 以外。-f / -F / --input で値を渡すものも含む）"
+  echo "  - push / PR 作成の前に GitHub 側の保護を確認し、足りないとき・確認できないときは止める"
   echo "  ※ 削除に関するルールに引っかかったときは、フォルダの中身を示してユーザーに削除を依頼する"
 else
   echo "  （フックがありません）"
@@ -77,4 +79,40 @@ if git -C "$proj" rev-parse --git-dir >/dev/null 2>&1; then
   echo "  現在のブランチ: $(git -C "$proj" symbolic-ref --short -q HEAD 2>/dev/null || echo 不明)"
 else
   echo "  git リポジトリではありません"
+fi
+
+echo
+echo "== GitHub（push 先の保護と、gh のトークン） =="
+checker="$HOME/.claude/hooks/check-remote-protection.sh"
+SANDBOX_NOTE="サンドボックスの中では gh を使えないことがある。自分のターミナルでこのスクリプトを実行すると確認できる"
+if ! git -C "$proj" rev-parse --git-dir >/dev/null 2>&1 || [ -z "$(git -C "$proj" remote 2>/dev/null)" ]; then
+  echo "  リモートがありません（GitHub に上げていない）"
+elif [ ! -f "$checker" ]; then
+  echo "  確認できません（$checker がありません）"
+else
+  rc=0
+  out="$(bash "$checker" "$proj" push)" || rc=$?
+  case $rc in
+    0) echo "  push 先の保護: 有効（main / develop に PR 必須・強制 push 禁止・削除禁止。自分は例外ではない）" ;;
+    1) echo "  push 先の保護: 足りない（$out）" ;;
+    *) echo "  push 先の保護: 確認できない（$out）。$SANDBOX_NOTE" ;;
+  esac
+
+  rc=0
+  headers="$(timeout 8 gh api -i rate_limit 2>/dev/null | tr -d '\r')" || rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "  トークンの期限: 確認できない。$SANDBOX_NOTE"
+  else
+    exp="$(sed -nE 's/^github-authentication-token-expiration: *//Ip' <<<"$headers" | head -1)"
+    if [ -z "$exp" ]; then
+      echo "  トークンの期限: なし（Claude 用の期限付きトークンではない可能性がある）"
+    else
+      days=$(( ($(date -d "$exp" +%s) - $(date +%s)) / 86400 ))
+      if [ "$days" -lt 7 ]; then
+        echo "  トークンの期限: $exp（残り $days 日）※ 7 日を切っています。GitHub の画面で作り直し、gh auth login --with-token で入れ直す"
+      else
+        echo "  トークンの期限: $exp（残り $days 日）"
+      fi
+    fi
+  fi
 fi

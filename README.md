@@ -22,7 +22,9 @@ claude-project-template/
 │   └── qa_log_line-bot.md            # このリポジトリを作るまでの相談の記録（line-bot から移管）
 ├── global/                           # ~/.claude に入れるもの
 │   ├── settings.json                 #   権限ルール・フックの登録など
-│   ├── hooks/guard-bash.sh           #   安全フック
+│   ├── hooks/
+│   │   ├── guard-bash.sh             #   安全フック
+│   │   └── check-remote-protection.sh #  GitHub 側の保護の確認（安全フックから呼ぶ）
 │   └── skills/
 │       ├── new-project/              #   /new-project（雛形一式を含む）
 │       │   ├── SKILL.md
@@ -40,13 +42,14 @@ claude-project-template/
 シェルスクリプトは使わない。Claude Code にこの README を読ませて、下の表のとおりに入れてもらう（ファイルを書くたびに確認が出るので、内容を見て許可する）。
 
 1. このリポジトリを clone する。
-2. 必要なソフトを入れる（自分のターミナルで）：`sudo pacman -S bubblewrap socat jq github-cli`
+2. 必要なソフトを入れる（自分のターミナルで）：`sudo pacman -S bubblewrap socat jq github-cli gitleaks`
 3. Claude Code に「claude-project-template の README のとおりに ~/.claude に入れて」と頼む。
 
 | コピー元 | コピー先 | 注意 |
 |---|---|---|
 | `global/settings.json` | `~/.claude/settings.json` | **上書きしない**。既にある場合は中身を統合する（既存の `enabledPlugins` などの個人の設定は残す）。統合前の控えを `~/.claude/backups/` に取る |
 | `global/hooks/guard-bash.sh` | `~/.claude/hooks/guard-bash.sh` | |
+| `global/hooks/check-remote-protection.sh` | `~/.claude/hooks/check-remote-protection.sh` | `guard-bash.sh` と同じフォルダに置く |
 | `global/skills/new-project/` | `~/.claude/skills/new-project/` | フォルダごと。`template/` 内の `.githooks` `.github` `.gitignore` などのドットファイルも漏らさない |
 | `global/skills/safety-rules/` | `~/.claude/skills/safety-rules/` | フォルダごと |
 
@@ -55,7 +58,26 @@ claude-project-template/
 1. テストを実行する：`bash ~/.claude/skills/safety-rules/scripts/test-guard.sh`（すべて成功すること）
 2. Claude Code を再起動し、`/permissions` と `/hooks` で設定が効いているか見る。
 
-**戻し方**：`~/.claude/backups/` の控えを `~/.claude/settings.json` に戻し、`~/.claude/hooks/guard-bash.sh` と 2 つの skill のフォルダを消す（フォルダの削除は自分のターミナルで）。
+**戻し方**：`~/.claude/backups/` の控えを `~/.claude/settings.json` に戻し、`~/.claude/hooks/` の 2 つのスクリプトと 2 つの skill のフォルダを消す（フォルダの削除は自分のターミナルで）。
+
+## Claude 用のトークン
+
+この PC の gh は、権限を絞ったトークンでログインする。Claude が使っても、できるのは「選んだリポジトリの作業ブランチへの push と PR の作成」程度になる。リポジトリの作成やブランチ保護の設定は GitHub の画面で行う。詳しくは [docs/design.md](docs/design.md) の 6 章。
+
+1. GitHub の Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token。
+   - Expiration：30〜90 日
+   - Repository access：Only select repositories（Claude に作業させるリポジトリだけ）
+   - Repository permissions：Contents（Read and write）、Pull requests（Read and write）。Metadata（Read-only）は自動で付く。ほかは付けない
+2. 自分のターミナルで、いまのログインを消してから、トークンで入れ直す。トークンは画面に貼り付けるだけで、ファイルやチャットには残さない。
+
+   ```bash
+   gh auth logout
+   gh auth login --with-token     # トークンを貼り付けて Enter、続けて Ctrl+D
+   gh auth setup-git
+   gh auth status
+   ```
+
+3. 期限が近づいたら（`/safety-rules` の点検で残り日数が出る）、同じ手順で作り直す。新しいリポジトリを作ったら、トークンの Repository access に足す。
 
 ## 使い方
 
