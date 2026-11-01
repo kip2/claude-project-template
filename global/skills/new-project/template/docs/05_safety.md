@@ -10,7 +10,7 @@ Claude Code が危険な操作をしないように、次の仕組みを重ね�
 | ④ サンドボックス | OS レベルの隔離（bubblewrap） | `.claude/settings.json` の `sandbox` | このプロジェクト |
 | ⑤ git のフック | main / develop への直接の push・commit を拒否 | `.githooks/` | このリポジトリ（Claude 以外の操作にも効く） |
 | ⑥ GitHub のブランチ保護 | main / develop は PR でしか変更できない | GitHub の Rulesets（`.github/rulesets/`） | GitHub 上（Public か有料プランのみ） |
-| ⑦ push 前の保護の確認 | push / PR 作成の前に⑥が有効かを確かめ、足りないとき・確認できないときは止める | `~/.claude/hooks/check-remote-protection.sh`（③から呼ぶ） | 全体 |
+| ⑦ push 前の保護の確認 | push / PR 作成の前に⑥が有効かを確かめ、足りないとき・確認できないときは止める。Private で⑥がないときは毎回確認を出す | `~/.claude/hooks/check-remote-protection.sh`（③から呼ぶ） | 全体 |
 | ⑧ 権限を絞ったトークン | gh / git が使うトークンは、選んだリポジトリの push と PR 作成だけができる | GitHub の Fine-grained token | GitHub 上 |
 
 ユーザー全体の層（②の一部と③）は、テンプレートリポジトリ `claude-project-template` から `~/.claude` に入れたもの。

@@ -35,7 +35,9 @@ g "$work/gitlab" remote add origin https://gitlab.com/test/repo.git
 # GitHub 側の保護の確認は、本物の gh の代わりに偽の gh を使う（ネットワークに出ない）。
 # FAKE_GH で GitHub 側の状態を切り替える：
 #   ok（保護あり）/ norules（ルールなし）/ nopr（PR 必須がない）/ bypass（自分が例外）
-#   nobypassinfo（例外かどうかが読めない）/ private（Private）/ offline（API に届かない）
+#   nobypassinfo（例外かどうかが読めない）/ offline（API に届かない）
+#   private（Private で ruleset あり = 有料プラン）/ privatefree（Private でルールの API が断られる）
+#   privateempty（Private でルールなし）/ privatenopr（Private で一部のルールだけ）
 mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
@@ -45,7 +47,9 @@ full='[{"type":"deletion","ruleset_id":1},{"type":"non_fast_forward","ruleset_id
 case "$2" in
   repos/*/rules/branches/*)
     case "$state" in
-      norules) echo '[]' ;;
+      privatefree) exit 1 ;;
+      norules|privateempty) echo '[]' ;;
+      nopr|privatenopr) echo '[{"type":"deletion","ruleset_id":1},{"type":"non_fast_forward","ruleset_id":1}]' ;;
       nopr) echo '[{"type":"deletion","ruleset_id":1},{"type":"non_fast_forward","ruleset_id":1}]' ;;
       *) echo "$full" ;;
     esac ;;
@@ -56,7 +60,7 @@ case "$2" in
       *) echo '{"id":1,"current_user_can_bypass":"never"}' ;;
     esac ;;
   repos/*)
-    if [ "$state" = private ]; then echo '{"private":true}'; else echo '{"private":false}'; fi ;;
+    case "$state" in private*) echo '{"private":true}' ;; *) echo '{"private":false}' ;; esac ;;
   *) exit 1 ;;
 esac
 FAKE
@@ -67,11 +71,15 @@ remote_state() { export FAKE_GH="$1"; }
 
 fail=0
 total=0
-check() { # check <ALLOW|DENY> <plain|empty|main|develop|feature> <コマンド>
+check() { # check <ALLOW|DENY|ASK> <plain|empty|main|develop|feature|gitlab> <コマンド>
   local expect="$1" where="$2" cmd="$3" out got
   total=$((total + 1))
   out=$(jq -n --arg c "$cmd" --arg d "$work/$where" '{tool_input:{command:$c},cwd:$d}' | bash "$hook")
-  if [ -n "$out" ]; then got=DENY; else got=ALLOW; fi
+  case "$(jq -r '.hookSpecificOutput.permissionDecision // empty' <<<"$out" 2>/dev/null)" in
+    deny) got=DENY ;;
+    ask) got=ASK ;;
+    *) if [ -n "$out" ]; then got=DENY; else got=ALLOW; fi ;;
+  esac
   if [ "$got" = "$expect" ]; then
     printf 'ok    %-5s [%-7s] %s\n' "$got" "$where" "$cmd"
   else
@@ -209,6 +217,17 @@ check ALLOW feature "gh pr checks 12"
 check ALLOW feature "gh run view 123"
 check ALLOW feature "git remote -v"
 check ALLOW feature "git config user.name"
+check DENY  feature "GH_TOKEN=abc gh api user"
+check DENY  feature "env GITHUB_TOKEN=abc gh pr list"
+check DENY  feature "export GH_CONFIG_DIR=/tmp/admin"
+check DENY  feature "cd x && GH_CONFIG_DIR=/tmp/admin gh repo create foo"
+check ALLOW feature "grep -n GH_TOKEN README.md"
+check DENY  plain   "bash ~/.claude/skills/new-project/scripts/github-setup.sh"
+check DENY  plain   "sh github-setup.sh --private"
+check DENY  plain   "~/.claude/skills/new-project/scripts/github-setup.sh --private"
+check DENY  plain   "cd x && ./github-setup.sh"
+check ALLOW plain   "cat ~/.claude/skills/new-project/scripts/github-setup.sh"
+check ALLOW plain   "grep -n gitleaks github-setup.sh"
 
 echo "--- GitHub 側の保護の確認（偽の gh を使う） ---"
 check ALLOW feature "git push -u origin feature/x"
@@ -225,6 +244,14 @@ check DENY  feature "git push -u origin feature/x"
 remote_state nobypassinfo
 check DENY  feature "git push -u origin feature/x"
 remote_state private
+check ALLOW feature "git push -u origin feature/x"
+remote_state privatefree
+check ASK   feature "git push -u origin feature/x"
+check ASK   feature "gh pr create --base develop --fill"
+check DENY  feature "git push origin develop"
+remote_state privateempty
+check ASK   feature "git push -u origin feature/x"
+remote_state privatenopr
 check DENY  feature "git push -u origin feature/x"
 remote_state offline
 check DENY  feature "git push -u origin feature/x"

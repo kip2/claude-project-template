@@ -62,7 +62,7 @@ generate() {
   echo "- core.hooksPath の変更（.githooks 以外）"
   echo "- main / develop にいるときの push・commit・merge・cherry-pick・revert・am・rebase"
   echo "- gh api の書き込み（GET 以外。-f / -F / --input で値を渡すものも含む）"
-  echo "- push / PR 作成の前に GitHub 側の保護を確認し、足りないとき・確認できないときは止める"
+  echo "- push / PR 作成の前に GitHub 側の保護を確認し、足りないとき・確認できないときは止める（Private で保護がないときは毎回確認を出す）"
   echo
   echo "### このプロジェクト（.claude/settings.json）"
   echo

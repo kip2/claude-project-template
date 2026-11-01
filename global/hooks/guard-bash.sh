@@ -31,6 +31,18 @@ deny() {
   exit 0
 }
 
+# 止めずに、ユーザーに確認を出す（理由を表示する）
+ask() {
+  jq -n --arg r "安全フックからの確認: $1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "ask",
+      permissionDecisionReason: $r
+    }
+  }'
+  exit 0
+}
+
 has() { printf '%s' "$cmd" | grep -Eq -- "$1"; }
 check() { if has "$1"; then deny "$2"; fi; }
 check_del() { if has "$1"; then deny "$2。$FOLDER_MSG"; fi; }
@@ -92,6 +104,9 @@ check '(^|[;&|(`[:space:]])gh[[:space:]]+workflow[[:space:]]+(run|enable|disable
 check '(^|[;&|(`[:space:]])gh[[:space:]]+repo[[:space:]]+set-default' 'gh の既定のリポジトリの変更は禁止'
 check 'git[[:space:]]+remote[[:space:]]+(add|set-url|rename)([[:space:]]|$)' 'push 先（リモート）の追加・変更はユーザーが行う'
 check 'git[[:space:]]+config[[:space:]][^;&|]*(credential|[Ii]nstead[Oo]f|remote\.[^[:space:]]+\.(push)?url)' 'git の認証情報・push 先の URL の設定は禁止'
+check '(^|[;&|(`[:space:]])(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)=' 'gh を別のログインやトークンで動かす指定は禁止'
+check '(^|[;&|(`[:space:]])((ba|z|da)?sh|source|exec|\.)[[:space:]]+([^;&|]*[[:space:]])?[^[:space:];&|]*github-setup\.sh' 'GitHub のセットアップスクリプトはユーザーが自分のターミナルで実行する'
+check '(^|[;&|(`])[[:space:]]*[^[:space:];&|]*github-setup\.sh' 'GitHub のセットアップスクリプトはユーザーが自分のターミナルで実行する'
 
 # gh api の書き込み（GET / HEAD 以外）。-f / -F / --input で値を渡すと、gh は自動で POST にする
 api_seg="$(printf '%s' "$cmd" | grep -Eo '(^|[;&|(`[:space:]])gh[[:space:]]+api([[:space:]][^;&|]*)?' || true)"
@@ -144,6 +159,7 @@ protect_check() { # protect_check <push|pr> [リモート名 | URL | owner/repo]
   case $rc in
     0) ;;
     1) deny "GitHub 側の保護が足りないため止めた：$out。$PROTECT_HOWTO" ;;
+    3) ask "$out。GitHub 側では止まらないので、push 先・PR の向き先が main / develop でないことを確かめてから許可すること" ;;
     *) deny "GitHub 側の保護を確認できないため止めた：${out:-原因不明}。ユーザーに状況を伝え、どうするか聞くこと" ;;
   esac
 }

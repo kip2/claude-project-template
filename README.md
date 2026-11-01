@@ -28,6 +28,7 @@ claude-project-template/
 │   └── skills/
 │       ├── new-project/              #   /new-project（雛形一式を含む）
 │       │   ├── SKILL.md
+│       │   ├── scripts/github-setup.sh #   GitHub に上げて設定するスクリプト（ユーザーが実行）
 │       │   ├── template/             #     プロジェクトにコピーするファイル
 │       │   └── template-claude/      #     プロジェクトの .claude/ に入れる安全設定
 │       └── safety-rules/             #   /safety-rules
@@ -77,13 +78,14 @@ claude-project-template/
    gh auth status
    ```
 
-3. 期限が近づいたら（`/safety-rules` の点検で残り日数が出る）、同じ手順で作り直す。新しいリポジトリを作ったら、トークンの Repository access に足す。
+3. 期限が近づいたら（`/safety-rules` の点検で残り日数が出る）、同じ手順で作り直す。新しいリポジトリをトークンの Repository access に足す作業は、`github-setup.sh` が手順を表示して案内する。
 
 ## 使い方
 
 | やりたいこと | 方法 |
 |---|---|
 | 新しいプロジェクトを始める | 空のディレクトリで Claude Code を起動し、`/new-project` |
+| GitHub に上げて設定する（リポジトリの作成、ブランチ保護など） | プロジェクトのフォルダで、自分のターミナルから `bash ~/.claude/skills/new-project/scripts/github-setup.sh`（Private なら `--private`）。`/new-project` の途中で案内される |
 | 安全ルールを見る・変える・点検する | `/safety-rules` |
 | 安全フックのテスト | `bash ~/.claude/skills/safety-rules/scripts/test-guard.sh` |
 

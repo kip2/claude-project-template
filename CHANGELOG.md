@@ -13,6 +13,7 @@
   - `/safety-rules` スキル：安全ルールの一覧・追加・削除・点検、`docs/05_safety.md` の自動生成
   - 安全フックのテスト（92 件）
   - このリポジトリ自体のブランチ保護（`.githooks/`、`.github/rulesets/`）
+- 2026-11-01: `github-setup.sh`：新しいプロジェクトを GitHub に上げ、ブランチ保護・シークレットスキャンの push 保護・Actions の権限・既定のブランチ・自動マージを 1 回で設定するスクリプト（ユーザーが実行）。管理用のログインはスクリプトの間だけ。トークンの対象への追加はブラウザを開いて案内する。Private（無料プラン）では使えない設定を飛ばして続ける。
 
 ### 変更
 
@@ -23,6 +24,7 @@
 - 2026-11-01: この PC の gh を、Claude 用の権限を絞ったトークン（Fine-grained PAT）でログインする運用に変更。`/new-project` の GitHub の手順を、リポジトリの作成・リモートの追加・ブランチ保護をユーザーが行う形に変更。README に「Claude 用のトークン」を追加。
 - 2026-11-01: `/safety-rules` の一覧表示に「GitHub」欄を追加（push 先の保護、トークンの残り日数）。
 - 2026-11-01: 安全フックの時間切れを 10 秒から 30 秒に延長（GitHub への問い合わせのため）。
+- 2026-11-01: `/new-project` の GitHub の手順を、`github-setup.sh` を使う形に変更。Private も選べるようにした。
 
 ### セキュリティ
 
@@ -32,3 +34,5 @@
 - 2026-11-01: 安全フックと権限ルールで止めるものを追加：`gh auth token / login / logout` など、`gh secret / variable`、`gh api` の書き込み（GET 以外、`-f` / `-F` / `--input` を含む）、リリースの作成・変更・削除、ワークフローの実行、`gh repo set-default`、`gh ruleset`、リモートの追加・変更、git の認証情報・push 先 URL の設定。テストは 141 件。
 - 2026-11-01: 読み取りだけの gh（PR・CI の結果・Issue の閲覧）を許可。PR のコメント・編集・ready は確認を出す。プロジェクトのサンドボックスの外で動かすコマンドに、これらを追加し、`gh repo create` を外した。
 - 2026-11-01: 雛形の git の pre-push フックで、gitleaks による秘密情報の検査を行う（ユーザーが入れる）。
+- 2026-11-01: Private で GitHub 側の保護がないリポジトリでは、Claude の push / PR 作成を止めずに、毎回確認を出す（`check-remote-protection.sh` の終了コード 3）。ruleset がある Private（有料プラン）は Public と同じに扱う。
+- 2026-11-01: 安全フックと権限ルールで、gh を別のログインやトークンで動かす指定（`GH_CONFIG_DIR=`、`GH_TOKEN=` など）と、`github-setup.sh` の実行を止める。テストは 157 件。

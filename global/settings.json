@@ -77,6 +77,13 @@
       "Bash(git remote rename *)",
       "Bash(git config credential.*)",
       "Bash(git config --global credential.*)",
+      "Bash(GH_TOKEN=*)",
+      "Bash(GITHUB_TOKEN=*)",
+      "Bash(GH_CONFIG_DIR=*)",
+      "Bash(export GH_*)",
+      "Bash(export GITHUB_TOKEN*)",
+      "Bash(bash *github-setup.sh*)",
+      "Bash(sh *github-setup.sh*)",
 
       "Read(~/.ssh/**)",
       "Read(~/.gnupg/**)",

@@ -26,7 +26,7 @@ AskUserQuestion などで、まとめて聞く。
 - 通信を許可するドメインで、標準（npm・PyPI・GitHub）以外に必要なもの（例：LINE なら `api.line.me`、`api-data.line.me`）
 - GitHub に上げるか。上げるなら Public か Private か
   - Public：GitHub のブランチ保護も使える。ただし、コード・ドキュメント・Q&A ログがすべて公開される
-  - Private：無料プランでは GitHub のブランチ保護が使えない。Claude の push と PR 作成は、安全フックが GitHub 側の保護を確認できないため止まる（push はユーザーが行う）
+  - Private：無料プランでは GitHub のブランチ保護とシークレットスキャンの push 保護が使えない。守りはローカルだけになり、Claude の push と PR 作成のたびに確認が出る
 
 ## 2. ファイルを作る
 
@@ -94,28 +94,27 @@ AskUserQuestion などで、まとめて聞く。
 
 ## 4. GitHub に上げる（上げる場合だけ）
 
-この PC の gh は、Claude 用の権限を絞ったトークン（Contents・Pull requests の読み書き、Metadata の読み取りだけ）でログインしている前提。リポジトリの作成、ブランチ保護、設定の変更はこのトークンではできないので、**ユーザーが GitHub の画面で行う**。
+この PC の gh は、Claude 用の権限を絞ったトークン（Contents・Pull requests の読み書き、Metadata の読み取りだけ）でログインしている前提。リポジトリの作成や設定の変更はこのトークンではできないので、**ユーザーがセットアップスクリプトを自分のターミナルで実行する**。Claude はこのスクリプトを実行しない（安全フックが止める）。
 
 1. `gh auth status` でログインしているか確認する。未ログインなら、README の「Claude 用のトークン」の手順で入れるよう伝えて待つ。
 2. **上げる前に**、上げるファイルの一覧（`git ls-files`）を示し、個人情報（メールアドレス、ホームディレクトリのパス、秘密情報）が入っていないか点検した結果を伝える。ユーザーの OK をもらう。
-3. ユーザーに、GitHub の画面で次を行ってもらう。
-   - New repository で `<名前>` を作る。README や .gitignore は付けない（空のまま）。Private にする場合、無料プランではブランチ保護が効かず、Claude の push は安全フックが止めることを伝える。
-   - Settings → Developer settings → Personal access tokens → Fine-grained tokens で、Claude 用のトークンの「Repository access」に `<名前>` を足す。
-4. ユーザーに、自分のターミナルで次を実行してもらう。最初の push は git のフックが止めるので `--no-verify` を付ける。リモートの追加は安全フックが Claude に禁止している。
+3. ユーザーに、自分のターミナルで次を実行してもらう（Private なら `--private` を付ける）。
 
    ```
-   git remote add origin https://github.com/<ユーザー名>/<名前>.git
-   git push --no-verify -u origin main develop
+   cd <プロジェクトのディレクトリ>
+   bash ~/.claude/skills/new-project/scripts/github-setup.sh            # Public
+   bash ~/.claude/skills/new-project/scripts/github-setup.sh --private  # Private
    ```
 
-5. ユーザーに、GitHub の画面で次を設定してもらう（Claude は設定しない）。
-   - **ブランチ保護**：Settings → Rules → Rulesets → New ruleset → Import a ruleset で `.github/rulesets/protect-main-develop.json` を読み込み、Create。Enforcement が Active、Bypass list が空であることを確かめる。
-   - **シークレットスキャンの push 保護**：Settings → Code security → Secret Protection と Push protection を Enable。
-   - **Actions の権限**：Settings → Actions → General → Workflow permissions を「Read repository contents and packages permissions」にし、「Allow GitHub Actions to create and approve pull requests」をオフ。
-   - **既定のブランチ**：Settings → General → Default branch を `develop` に。
-   - **自動マージ**：Settings → General → Pull Requests の「Allow auto-merge」をオフ。
-6. `bash ~/.claude/skills/safety-rules/scripts/show-rules.sh` の「GitHub」欄で、push 先の保護が「有効」になっていることを確かめる。サンドボックスの中で「確認できない」と出たら、ユーザーに自分のターミナルで同じコマンドを実行してもらう。
-7. 作業ブランチは Claude が push してよい（`git push -u origin docs/requirements`。確認が出る）。push の前に、安全フックが GitHub 側の保護を確かめ、足りなければ止める。止まったら、表示された内容をユーザーに伝える。
+   スクリプトが行うこと（途中でブラウザでの操作が 2 回ある）：
+   - 全履歴の秘密情報の検査（gitleaks）と、上げる内容の確認
+   - 管理用の一時ログイン（ブラウザで承認。終わったら消える）
+   - リポジトリの作成と origin の追加
+   - Claude 用のトークンの対象への追加（ブラウザが開き、手順が表示される）と、main / develop の最初の push
+   - ブランチ保護（ruleset）、シークレットスキャンの push 保護、Actions の権限、既定のブランチ（develop）、自動マージのオフ。Private（無料プラン）では、ruleset と push 保護は飛ばして続ける
+   - 最後に、Claude の push 前の確認と同じものを実行して結果を表示する
+4. ユーザーが「終わった」と言ったら、`bash ~/.claude/skills/safety-rules/scripts/show-rules.sh` の「GitHub」欄で、push 先の保護を確かめる。Public なら「有効」、Private なら「なし」になっていればよい。サンドボックスの中で「確認できない」と出たら、ユーザーに自分のターミナルで同じコマンドを実行してもらう。スクリプトが「うまくいかなかったもの」を表示していたら、その内容を聞いて対処する。
+5. 作業ブランチは Claude が push してよい（`git push -u origin docs/requirements`。確認が出る）。push の前に、安全フックが GitHub 側の保護を確かめる。足りなければ止まるので、表示された内容をユーザーに伝える。Private で保護がない場合は、毎回確認が出る。
 
 ## 5. 仕上げ
 

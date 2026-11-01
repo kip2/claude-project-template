@@ -133,12 +133,40 @@
 - 保護の確認は `check-remote-protection.sh`（`~/.claude/hooks/`）にまとめ、安全フックと `/safety-rules` の点検の両方から呼ぶ。
 - 確認する相手は、`git push` なら push 先のリモート（指定がなければ現在のブランチの upstream、なければ origin）、`gh pr create` なら `-R` で指定したリポジトリ（指定がなければ gh の既定、upstream、origin の順）。
 - 安全フックの時間切れ（タイムアウト）は 10 秒から 30 秒に延ばす。GitHub への問い合わせを毎回行うため。時間切れのときもコマンドは止まる。
-- Private リポジトリは、無料プランかどうかを確かめられないため、常に止める（ユーザーに聞く）。
+- Private リポジトリは、ruleset があれば Public と同じに確認する。なければ、止めずに毎回ユーザーに確認を出す（6.10）。
 - 見るのは ruleset だけ。昔からのブランチ保護（classic branch protection）は読むのに Administration の権限が要るため、見ない（ruleset がなければ「足りない」と判定する）。
 - テストでは、本物の gh の代わりに偽の gh（`PATH` の先頭に置く）を使い、ネットワークに出ずに GitHub 側の状態を切り替える。
 - `gh api` の書き込みは、`-X` / `--method` で GET・HEAD 以外を指定した場合に加え、`-f` / `-F` / `--input` で値を渡した場合（gh が自動で POST にする）も止める。
 
+### 6.10 GitHub のセットアップスクリプト（`github-setup.sh`）
+
+新しいプロジェクトを GitHub に上げるときの画面での作業を、1 回のスクリプトにまとめる。ユーザーが自分のターミナルで、プロジェクトのフォルダで実行する。
+
+```
+bash ~/.claude/skills/new-project/scripts/github-setup.sh [--private] [リポジトリ名]
+```
+
+| 手順 | 内容 | Private（無料プラン）のとき |
+|---|---|---|
+| 1. 前提の確認 | git リポジトリか、main と develop があるか、gh・jq・gitleaks があるか、origin がまだないか | 同じ |
+| 2. 秘密情報の検査 | 全履歴を gitleaks で調べる（最初の push は `--no-verify` でフックを飛ばすため） | 同じ |
+| 3. 上げる内容の確認 | リポジトリ名・公開範囲・ファイルの一覧を表示し、Enter で進む | 同じ |
+| 4. 管理用ログイン | 一時フォルダに `gh auth login --web --insecure-storage`。ブラウザで承認する | 同じ |
+| 5. リポジトリの作成 | 管理用ログインで作成し、origin を足す | `--private` で作る |
+| 6. トークンへの追加と最初の push | ブラウザでトークンの画面を開き、手順を表示する。main と develop を Claude 用のトークンで push し、失敗したら手順を表示して待つ | 同じ |
+| 7. GitHub の設定 | ruleset、シークレットスキャンの push 保護、Actions の権限、既定のブランチ、自動マージ | ruleset と push 保護は試して、断られたら飛ばす |
+| 8. 確認 | `check-remote-protection.sh` を Claude 用のトークンで実行する | 「GitHub 側の保護なし」と表示する |
+| 9. 後始末 | 管理用ログインのログアウトと一時フォルダの削除。途中で止まったときも必ず行う | 同じ |
+
+- **管理用ログイン**：保存先は一時フォルダのファイル（`--insecure-storage`）。パスワード保管庫（keyring）に入れると、同じアカウントの Claude 用のトークンを上書きするため。gh のログアウトは手元の情報を消すだけで、GitHub 側の OAuth の許可は残る。気になる場合は GitHub の Settings → Applications で取り消せる。
+- **Claude に実行させない守り**：
+  - スクリプト自身が、環境変数 `CLAUDECODE` があれば何もせずに終了する。
+  - 安全フックと権限ルールで、スクリプトの実行を止める。
+  - 安全フックと権限ルールで、gh を別のログインやトークンで動かす指定（`GH_CONFIG_DIR=`、`GH_TOKEN=`、`GITHUB_TOKEN=` など）を止める。
+- **Private で GitHub 側の保護がないとき**：`check-remote-protection.sh` は終了コード 3 を返す。安全フックは止めずに、毎回ユーザーに確認を出す（理由として「GitHub 側の保護がなく、ローカルの守りだけ」と表示する）。有料プランで ruleset がある Private は、Public と同じに扱う。
+- **残る危険**：Private では GitHub 側の最後の砦がない。Claude が安全フックをすり抜ける書き方をした場合、トークンの Contents の書き込み権限で develop や main に直接書き込める余地がある。確認のたびに、push 先をユーザーが見る。
+
 ### 6.9 要検証（実際の環境で確かめる）
 
 - 安全フックの中から gh を使えるか。フックはサンドボックスの外で動くはずだが、プロジェクト（サンドボックスあり）で実際に試す。
-- `current_user_can_bypass` が、Claude 用のトークン（Administration なし）でも読めるか。読めないときは「確認できない」として止まるので、トークンに Administration（読み取りだけ）を足すかを決める。
+- ~~`current_user_can_bypass` が、Claude 用のトークン（Administration なし）でも読めるか~~ → 2026-11-01 に確認済み。Claude 用のトークン（Contents・Pull requests・Metadata だけ）で、このリポジトリの保護の確認が「保護あり」になった。Administration は不要。
